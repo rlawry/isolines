@@ -1,192 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canvas Heatmap</title>
-    <style>
-        canvas {
-            border: 1px solid black;
-            cursor: crosshair;
+<html>
+    <head>
+        <title></title>
+        <style>
+            body { margin: 0; }
+            canvas { width: 100%; height: 100% }
+        </style>
+        <script src='heatmap.js'></script>
+        <script>
+        var height = 500;
+        var width = 500;
+        var run = function () {
+            var can2 = document.getElementById("cns2"),
+                ctx2 = can2.getContext("2d"),
+                drw2 = new TemperatureMap(ctx2);
+
+            drw2.setRandomPoints(25, width, height);
+            drw2.drawFull(true, function () { drw2.drawPoints(); });
         }
-    </style>
-</head>
-<body>
-    <canvas id="heatmapCanvas" width="400" height="400"></canvas>
-    <script>
-        const canvas = document.getElementById('heatmapCanvas');
-        const ctx = canvas.getContext('2d');
-
-        // Generate random temperatures between 30 and 60
-        function getRandomTemperature() {
-            return Math.floor(Math.random() * (60 - 30 + 1)) + 30;
-        }
-
-        // Define positions for the four quadrants
-        const positions = [
-            { x: 100, y: 100 },
-            { x: 300, y: 100 },
-            { x: 100, y: 300 },
-            { x: 300, y: 300 }
-        ];
-
-        // Generate random temperatures
-        const temperatures = positions.map(getRandomTemperature);
-
-        // Define heatmap array to store temperature values
-        const heatmap = [];
-
-        // Isoline temperature to draw and validate against
-        const isolineTemperature = 45;
-
-        // Function to calculate the Gaussian weight
-        function gaussian(x, sigma) {
-            return Math.exp(-x * x / (2 * sigma * sigma));
-        }
-
-        // Function to calculate distance between two points
-        function distance(point1, point2) {
-            const dx = point1.x - point2.x;
-            const dy = point1.y - point2.y;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        // Function to generate heatmap
-        function generateHeatmap() {
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-            const sigma = 100; // Standard deviation for the Gaussian function
-
-            for (let y = 0; y < canvas.height; y++) {
-                heatmap[y] = [];
-                for (let x = 0; x < canvas.width; x++) {
-                    let weightedSum = 0;
-                    let weightSum = 0;
-                    for (let i = 0; i < temperatures.length; i++) {
-                        const dist = distance({ x, y }, positions[i]);
-                        const weight = gaussian(dist, sigma);
-                        weightedSum += temperatures[i] * weight;
-                        weightSum += weight;
-                    }
-                    const tempValue = weightedSum / weightSum;
-                    heatmap[y][x] = tempValue; // Store temperature in heatmap array
-                    const intensity = Math.round((tempValue - 30) / (60 - 30) * 255); // Normalize intensity
-                    const pixelIndex = (y * canvas.width + x) * 4;
-                    data[pixelIndex] = intensity; // Red channel
-                    data[pixelIndex + 1] = 0; // Green channel
-                    data[pixelIndex + 2] = 0; // Blue channel
-                    data[pixelIndex + 3] = 255; // Alpha channel
-                }
-            }
-
-            ctx.putImageData(imgData, 0, 0);
-        }
-
-        // Function to draw temperature dots
-        function drawTemperatureDots() {
-            ctx.fillStyle = 'black';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            for (let i = 0; i < temperatures.length; i++) {
-                ctx.beginPath();
-                ctx.arc(positions[i].x, positions[i].y, 5, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillText(temperatures[i] + '°F', positions[i].x, positions[i].y - 15);
-            }
-        }
-
-        // Function to draw isoline temperature at the top center
-        function drawIsolineTemperature() {
-            ctx.fillStyle = 'black';
-            ctx.font = '16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`Isoline Temperature: ${isolineTemperature}°F`, canvas.width / 2, 20);
-        }
-
-        // Function to handle drawing the isoline
-        let drawing = false;
-        let path = [];
-
-        canvas.addEventListener('mousedown', () => {
-            drawing = true;
-            path = [];
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            drawing = false;
-            checkIsoline(path);
-        });
-
-        canvas.addEventListener('mousemove', (event) => {
-            if (drawing) {
-                const rect = canvas.getBoundingClientRect();
-                const x = event.clientX - rect.left;
-                const y = event.clientY - rect.top;
-                path.push({ x, y });
-                drawIsoline(path);
-            }
-        });
-
-        // Function to draw the isoline
-        function drawIsoline(path) {
-            ctx.putImageData(ctx.getImageData(0, 0, canvas.width, canvas.height), 0, 0); // Redraw heatmap and dots
-            drawTemperatureDots();
-            drawIsolineTemperature();
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(path[0].x, path[0].y);
-            for (let i = 1; i < path.length; i++) {
-                const x = Math.round(path[i].x);
-                const y = Math.round(path[i].y);
-                const temp = heatmap[y][x];
-                ctx.strokeStyle = (temp >= isolineTemperature - 0.5 && temp <= isolineTemperature + 0.5) ? 'blue' : 'yellow';
-                ctx.lineTo(path[i].x, path[i].y);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(path[i].x, path[i].y);
-            }
-        }
-
-        // Function to check if the isoline is correct
-        function checkIsoline(path) {
-            let allCorrect = true;
-            for (let i = 0; i < path.length; i++) {
-                const x = Math.round(path[i].x);
-                const y = Math.round(path[i].y);
-                const temp = heatmap[y][x];
-                if (temp < isolineTemperature - 0.5 || temp > isolineTemperature + 0.5) { // Allow a small margin of error
-                    allCorrect = false;
-                    break;
-                }
-            }
-            if (allCorrect) {
-                console.log('Correct isoline drawn!');
-            } else {
-                console.log('Incorrect isoline drawn!');
-            }
-        }
-
-        // Function to display temperature at clicked point
-        function displayTemperatureAtPoint(event) {
-            const rect = canvas.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            const tempValue = heatmap[Math.round(y)][Math.round(x)];
-            ctx.fillStyle = 'black';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(tempValue.toFixed(1) + '°F', x, y);
-        }
-
-        // Add event listener for canvas click to display temperature
-        canvas.addEventListener('click', displayTemperatureAtPoint);
-
-        // Initialize heatmap and draw temperature dots and isoline temperature
-        generateHeatmap();
-        drawTemperatureDots();
-        drawIsolineTemperature();
-    </script>
-</body>
+        </script>
+    </head>
+    <body onload='run()'>
+        <canvas id='cns2' width='500' height='500' style="position: absolute; top:  0px; left:    0px; height: 500px; width: 500px;"></canvas>
+    </body>
 </html>
